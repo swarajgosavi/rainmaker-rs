@@ -1,0 +1,27 @@
+[target.riscv32imc-esp-espidf]
+runner = "espflash flash --monitor -b 2115200"
+linker = "ldproxy"
+rustflags = [
+    "--cfg", "espidf_time64",
+    "-C", "default-linker-libraries",
+]
+
+[target.xtensa-esp32-espidf]
+runner = "espflash flash --monitor"
+linker = "ldproxy"
+rustflags = [
+    "--cfg", "espidf_time64",
+]
+
+[build]
+# target = "xtensa-esp32-espidf"
+target = "riscv32imc-esp-espidf"
+# target = "x86_64-unknown-linux-gnu"
+
+[alias]
+run_linux = "run --target x86_64-unknown-linux-gnu"
+run_esp = "run --target riscv32imc-esp-espidf"
+run_esp32 = "run --target xtensa-esp32-espidf"
+
+[unstable]
+build-std = ["std", "panic_abort"]

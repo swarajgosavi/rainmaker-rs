@@ -1,0 +1,50 @@
+[package]
+name = "mdns"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+license = "GPL-3.0-only"
+license-file = "LICENSE"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[profile.release]
+opt-level = "s"
+
+[profile.dev]
+debug = true    # Symbols are nice and they don't increase the size on Flash
+opt-level = "z"
+
+[features]
+default = ["std", "hal", "esp-idf-sys/native"]
+
+backtrace = []
+pio = ["esp-idf-sys/pio"]
+all = ["std", "nightly", "experimental"]
+hal = ["esp-idf-hal", "embedded-svc"]
+std = ["alloc", "esp-idf-sys/std", "esp-idf-sys/binstart", "embedded-svc?/std", "esp-idf-hal?/std", "esp-idf-svc/std"]
+alloc = ["embedded-svc?/alloc", "esp-idf-hal?/alloc", "esp-idf-svc/alloc"]
+nightly = ["embedded-svc?/nightly", "esp-idf-svc/nightly"] # Future: "esp-idf-hal?/nightly"
+experimental = ["embedded-svc?/experimental", "esp-idf-svc/experimental"]
+# embassy = ["esp-idf-hal?/embassy-sync", "esp-idf-hal?/critical-section", "esp-idf-svc?/embassy-time-driver", "esp-idf-svc?/embassy-time-isr-queue"]
+
+[dependencies]
+log = { version = "0.4.17", default-features = false }
+anyhow = "1.0.72"
+futures = "0.3.28"
+heapless = { version = "0.8", default-features = false }
+
+[target."cfg(target_os=\"espidf\")".dependencies]
+esp-idf-sys = { version = "0.33.7", default-features = false }
+esp-idf-hal = { version = "0.42.5", optional = true, default-features = false }
+esp-idf-svc = { version = "0.47.3", default-features = false }
+embedded-svc = { version = "0.27.1", optional = true, default-features = false}
+
+[target."cfg(target_os=\"linux\")".dependencies]
+zeroconf = "0.14.1"
+
+[[package.metadata.esp-idf-sys.extra_components]]
+remote_component = { name = "espressif/mdns", version = "1.2" }
+
+[build-dependencies]
+embuild = {version = "0.31.4", default-features = false, features = ["espidf"]}
