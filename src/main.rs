@@ -2,7 +2,7 @@ use anyhow::{bail, Result};
 use esp_idf_svc::{
     eventloop::EspSystemEventLoop, 
     hal::{peripheral, prelude::Peripherals}, 
-    mdns::EspMdns, 
+    // mdns::EspMdns, 
     wifi::{AuthMethod, BlockingWifi, ClientConfiguration, Configuration, EspWifi}
 };
 use log::{info, warn};
@@ -75,8 +75,8 @@ pub fn wifi(
     Ok(Box::new(esp_wifi))
 }
 
-const SSID: &str = "Gosavi";
-const PASS: &str = "sachgosavi";
+const SSID: &str = "Swaraj's vivo Y53s";
+const PASS: &str = "swaraj123";
 
 fn main() -> Result<()> {
     esp_idf_svc::sys::link_patches();
@@ -103,8 +103,17 @@ fn main() -> Result<()> {
     };
 
     let mut mdns = MdnsService::mdns_init().unwrap();
-    mdns.mdns_hostname_set("esp_hostname");
-    mdns.mdns_service_add("esp32c3", "_http", "_tcp", &[("hello", "world")]);
+    mdns.mdns_hostname_set("7eescxCfhuR4W6iMB5Ebew");
+    mdns.mdns_service_add(
+        "7eescxCfhuR4W6iMB5Ebew", 
+        "_esp_local_ctrl", 
+        "_tcp",
+        &[
+            ("node_id", "7eescxCfhuR4W6iMB5Ebew"), 
+            ("version_endpoint", "/esp_local_ctrl/version"), 
+            ("session_endpoint", "/esp_local_ctrl/session"), 
+            ("control_endpoint", "/esp_local_ctrl/control"),
+        ]);
 
     loop {
         // Wait...

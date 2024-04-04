@@ -1,5 +1,5 @@
 [target.riscv32imc-esp-espidf]
-runner = "espflash flash --monitor -b 2115200"
+runner = "espflash flash --monitor"
 linker = "ldproxy"
 rustflags = [
     "--cfg", "espidf_time64",

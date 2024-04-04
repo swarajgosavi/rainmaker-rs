@@ -1,5 +1,4 @@
 use super::MdnsService;
-use crate::mdns::base::*;
 
 impl MdnsService<esp_idf_svc::mdns::EspMdns> {
     pub fn mdns_init() -> anyhow::Result<Self> {
@@ -15,8 +14,12 @@ impl MdnsService<esp_idf_svc::mdns::EspMdns> {
     }
 
     pub fn mdns_service_add(&mut self, instance_name: &str, service_type: &str, proto: &str, txt: &[(&str, &str)]) {
+
+        let service_type = format!("_{}", service_type);
+        let proto = format!("_{}", proto);
+
         self.mdns_service
-            .add_service(Some(instance_name), service_type, proto, MDNS_PORT, txt)
+            .add_service(Some(instance_name), &service_type, &proto, 8080, txt)
             .unwrap();
     }
 }

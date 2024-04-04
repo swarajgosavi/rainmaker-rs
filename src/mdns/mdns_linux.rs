@@ -1,5 +1,4 @@
 use super::MdnsService;
-use crate::mdns::base::*;
 
 use zeroconf::prelude::*;
 use zeroconf::ServiceType;
@@ -17,14 +16,14 @@ impl LinuxMdns {
 
 impl MdnsService<LinuxMdns> {
     pub fn mdns_init() -> anyhow::Result<Self> {
-        println!("mdns initialized");
+        log::info!("mdns initialized");
         Ok(MdnsService{
             mdns_service: LinuxMdns::take().unwrap()
         })
     }
 
     pub fn mdns_hostname_set(&mut self, hostname: &str) {
-        println!("Set hostname {}", hostname);
+        log::info!("Set hostname {}", hostname);
     }
 
     pub fn mdns_service_add(&mut self, instance_name: &str, service_type: &str, proto: &str, txt: &[(&str, &str)]) {
@@ -44,7 +43,7 @@ impl MdnsService<LinuxMdns> {
             log::info!("mDNS TXT key {} val {}", txt_val.0, txt_val.1);
             if let Err(err) = txt_record.insert(txt_val.0, txt_val.1) {
                 log::error!(
-                    "Encountered error inserting kv-pair into txt record {}",
+                    "Encountered error inserting txt-pair into txt record {}",
                     err.to_string()
                 );
             }
@@ -53,7 +52,7 @@ impl MdnsService<LinuxMdns> {
         let servicename = instance_name.to_owned();
 
         std::thread::spawn(move || {
-            let mut mdns_service = zeroconf::MdnsService::new(service_type, MDNS_PORT);
+            let mut mdns_service = zeroconf::MdnsService::new(service_type, 8080);
             mdns_service.set_name(&servicename);
             mdns_service.set_txt_record(txt_record);
             // mdns_service.set_registered_callback(Box::new(|_, _| {}));
@@ -73,7 +72,7 @@ impl MdnsService<LinuxMdns> {
                         );
                         break;
                     }
-                    // println!("in loop");
+                    // log::info!("in loop");
                 },
                 Err(err) => log::error!(
                     "Encountered error registering mDNS service: {}",
