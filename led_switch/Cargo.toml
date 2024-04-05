@@ -17,13 +17,13 @@ rainmaker = { path = "../rainmaker" }
 components = { path = "../components" }
 log = "0.4.20"
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
+mdns = { path = "../../../projects/mdns"}
 
 [target.'cfg(target_os="espidf")'.dependencies]
 esp-idf-svc = { version = "0.47.3", default-features = false, features = ["binstart"] }
 ws2812-esp32-rmt-driver = "0.7.1"
 smart-leds = "0.4.0"
 smart-leds-trait = "0.2.1"
-mdns = { path = "../../../projects/mdns"}
 
 
 [build-dependencies]

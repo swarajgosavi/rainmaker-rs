@@ -1,52 +1,112 @@
-use components::protocomm::*;
+use components::{http::HttpConfiguration, protocomm::*};
 use crate::node::Node;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::{
     collections::HashMap,
     sync::Arc,
 };
 
-pub struct LocalCtrlConfig<'a> {
+
+const LOCAL_CTRL_VER: &str = "v1.1";
+const LOGGER_TAH: &str = "local_ctrl";
+const CAP_LOCAL_CTRL: &str = "wifi_scan"; // wifi scan capability
+const CAP_NO_SEC: &str = "no_sec"; // capability signifying sec0
+const CAP_NO_POP: &str = "no_pop"; // no PoP in case of sec1 and sec2
+
+#[derive(Default)]
+pub enum LocalCtrlScheme {
+    #[default]
+    SoftAP,
+}
+
+#[derive(Default)]
+pub struct LocalCtrlConfig {
+    pub device_name: String,
+    pub scheme: LocalCtrlScheme,
+    pub security: ProtocommSecurity,
+}
+
+pub struct LocalCtrlService<'a> {
     pub protocom: Protocomm<'a>,
     pub node: Arc<Node<'a>>,
 }
 
-impl<'a> LocalCtrlConfig<'a> 
+impl<'a> LocalCtrlService<'a> 
 where
     'a : 'static
 {
-    pub fn local_ctrl_start(&mut self) -> anyhow::Result<(), anyhow::Error> {
-        
-        let pc = &self.protocom;
-        let node = self.node.clone();
-        log::info!("adding local_ctrl listeners");
+    pub fn new(
+        config: LocalCtrlConfig,
+        node: Arc<Node<'a>>,
+    ) -> Self {
+        let version_info = Self::get_version_info(&config.security);
+        let protocomm_config = ProtocommConfig {
+            transport: ProtocomTransportConfig::Httpd(HttpConfiguration{
+                port: 8080,
+                ..Default::default()
+            }),
+            security: config.security,
+        };
 
+        let protocomm = Protocomm::new(protocomm_config);
+
+        let mut local_ctrl_service = Self {
+            protocom: protocomm,
+            node
+        };
+        local_ctrl_service.init(version_info);
+
+        local_ctrl_service
+    }
+
+    pub fn init(&mut self, version_info: serde_json::Value) {
+        self.register_listeners(version_info);
+    }
+
+    pub fn register_listeners(&mut self, version_info: serde_json::Value) {
+        log::debug!(target: LOGGER_TAH, "adding local_ctrl listeners");
+
+        let node = self.node.clone();
+        
+        let pc = &mut self.protocom;
         pc.set_security_endpoint("esp_local_ctrl/session").unwrap();
+
+        pc.set_version_endpoint("esp_local_ctrl/version", version_info.to_string())
+            .unwrap();
 
         pc.register_endpoint("esp_local_ctrl/control", move |ep, data| -> Vec<u8> {
             control_handler(ep, data, node.to_owned())
         })
             .unwrap();
-
-        pc.register_endpoint("esp_local_ctrl/version", version_handler)
-            .unwrap();
-
-        pc.start();
-
-        Ok(())
     }
-}
 
-pub fn version_handler(
-    _ep: String,
-    data: Vec<u8>
-) -> Vec<u8> {
+    fn get_version_info(sec_config: &ProtocommSecurity) -> serde_json::Value {
+        let mut local_capabilities = vec![CAP_LOCAL_CTRL];
+        let sec_ver = match sec_config {
+            ProtocommSecurity::Sec0(_) => {
+                local_capabilities.push(CAP_NO_SEC);
+                // return sec0
+                0
+            }
+            ProtocommSecurity::Sec1(sec1_inner) => {
+                if sec1_inner.pop.is_none() {
+                    local_capabilities.push(CAP_NO_POP)
+                };
+                // return sec1
+                1
+            }
+        };
 
-    let req_proto = LocalCtrlMessage::decode(&*data).unwrap();
+        let ver_info = json!({
+            "local_ctrl": {
+                "ver": LOCAL_CTRL_VER,
+                "sec_ver": sec_ver,
+                "cap": local_capabilities
+            }
+        });
 
-    log::info!("local_ctrl_version_payload: {:?}", req_proto);
-
-    "version url Local control version v1.0".as_bytes().to_vec()
+        ver_info
+    }
 }
 
 pub fn control_handler(
@@ -61,13 +121,13 @@ pub fn control_handler(
 
     match req_proto.payload.clone().unwrap() {
         local_ctrl_message::Payload::CmdGetPropCount(values) => {
-            println!("values are {:?}", values);
+            log::info!("values are {:?}", values);
         },
         local_ctrl_message::Payload::CmdGetPropVals(values) => {
-            println!("values are {:?}", values);
+            log::info!("values are {:?}", values);
         },
         local_ctrl_message::Payload::CmdSetPropVals(values) => {
-            println!("values are {:?}", values);
+            log::info!("values are {:?}", values);
         },
         _ => unreachable!(),
     }
@@ -128,7 +188,7 @@ fn handle_cmd_set_property_values(req_payload: local_ctrl_message::Payload, node
         local_ctrl_message::Payload::CmdSetPropVals(values) => {
             resp_payload.status = Status::Success.into();
 
-            log::info!("{:?}", values);
+            // log::info!("{:?}", values);
             log::info!("{:?}", std::str::from_utf8(&values.props[0].value).unwrap());
 
             let msg = values.props[0].value.clone();

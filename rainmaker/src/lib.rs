@@ -6,9 +6,7 @@ pub(crate) mod utils;
 pub mod wifi_prov;
 pub mod local_ctrl;
 
-use ::mdns::mdns::*;
-use components::protocomm::transports::httpd::TransportHttpd;
-use components::protocomm::*;
+// use ::mdns::mdns::*;
 
 use components::{
     mqtt::{self, MqttClient, MqttConfiguration, MqttEvent, TLSconfiguration},
@@ -37,6 +35,8 @@ use components::wifi::WifiClientConfig;
 #[cfg(target_os = "linux")]
 use std::{env, fs, path::Path};
 
+use crate::local_ctrl::LocalCtrlService;
+
 pub type WrappedInArcMutex<T> = Arc<Mutex<T>>;
 
 #[allow(dead_code)]
@@ -47,7 +47,7 @@ pub struct Rainmaker<'a> {
     // remove this later when mqtt client passing works for user_cloud_mapping on esp
     mqtt_client: Option<WrappedInArcMutex<MqttClient<'a>>>,
     node: Option<Arc<node::Node<'a>>>,
-    local_ctrl: Option<LocalCtrlConfig<'a>>,
+    local_ctrl: Option<LocalCtrlService<'a>>,
 }
 
 unsafe impl Send for Rainmaker<'_> {}
@@ -346,25 +346,25 @@ where
         }
     }
 
-    pub fn local_ctrl_init(&mut self) -> Result<(), RMakerError> {
+    pub fn local_ctrl_init(&mut self, sec_config: ProtocommSecurity) -> Result<(), RMakerError> {
 
-        let node_id = self.get_node_id();
+        // let node_id = self.get_node_id();
 
-        let mut mdns = MdnsService::mdns_init().unwrap();
-        mdns.mdns_hostname_set(&node_id);
+        // let mut mdns = MdnsService::mdns_init().unwrap();
+        // mdns.mdns_hostname_set(&node_id);
     
-        mdns.mdns_service_add(
-            &node_id, 
-            "esp_local_ctrl", 
-            "tcp", 
-            &[
-                ("node_id", &node_id), 
-                ("version_endpoint", "/esp_local_ctrl/version"), 
-                ("session_endpoint", "/esp_local_ctrl/session"), 
-                ("control_endpoint", "/esp_local_ctrl/control"),
-            ]);    
+        // mdns.mdns_service_add(
+        //     &node_id, 
+        //     "esp_local_ctrl", 
+        //     "tcp", 
+        //     &[
+        //         ("node_id", &node_id), 
+        //         ("version_endpoint", "/esp_local_ctrl/version"), 
+        //         ("session_endpoint", "/esp_local_ctrl/session"), 
+        //         ("control_endpoint", "/esp_local_ctrl/control"),
+        //     ]);    
 
-        log::info!("node id: {}", &node_id);
+        // log::info!("node id: {}", &node_id);
 
         let node = match &self.node {
             Some(node) => node.clone(),
@@ -375,20 +375,16 @@ where
             }
         };
 
-        let protocomm_config = ProtocommConfig {
-            transport: ProtocomTransportConfig::Httpd(HttpConfiguration::default()),
-            security: config.security,
+        let local_ctrl_config = LocalCtrlConfig {
+            device_name: "ABC12".into(),
+            scheme: local_ctrl::LocalCtrlScheme::SoftAP,
+            security: sec_config,
         };
 
-        let protocomm_new = Protocomm::new(protocomm_config);
+        self.local_ctrl = Some(
+            LocalCtrlService::new(local_ctrl_config, node)
+        );
 
-        self.local_ctrl = Some(LocalCtrlConfig {
-                protocom: protocomm_new,
-                node: node.to_owned(),
-            });
-
-
-        let _result = LocalCtrlConfig::local_ctrl_start(&mut self.local_ctrl.as_mut().unwrap());
         Ok(())
     }
 }

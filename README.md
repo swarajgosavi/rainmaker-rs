@@ -92,5 +92,5 @@ When running for the first time, you'll need to set ```RMAKER_CLAIMDATA_PATH``` 
 
 
 #### Local ctrl note (Will be removed later)
-- **Read the readme file in lede switch for local ctrl feature**
+- **Read the readme file in led switch for local ctrl feature**
 ---

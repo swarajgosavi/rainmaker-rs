@@ -6,6 +6,8 @@ use components::protocomm::ProtocommSecurity;
 use device_led::*;
 use device_light::*;
 
+use ::mdns::mdns::*;
+
 #[cfg(target_os = "espidf")]
 use esp_idf_svc::hal::{
     ledc::{self, LedcDriver, LedcTimerDriver},
@@ -75,7 +77,7 @@ fn main() -> Result<(), RMakerError> {
         .unwrap();
 
         let light_driver_local =
-            Ws2812Esp32Rmt::new(peripherals.rmt.channel0, peripherals.pins.gpio2).unwrap();
+            Ws2812Esp32Rmt::new(peripherals.rmt.channel0, peripherals.pins.gpio8).unwrap();
 
         led_driver = Box::leak(Box::new(Mutex::new(led_driver_local)));
         light_driver = Box::leak(Box::new(Mutex::new(light_driver_local)));
@@ -114,30 +116,25 @@ fn main() -> Result<(), RMakerError> {
     node.add_device(led_device);
     rmaker.register_node(node);
     rmaker.init_wifi(ProtocommSecurity::new_sec1(Some("abcd1234".to_string())))?; // hardcoded
+
+    let node_id = rmaker.get_node_id();
+    let mut mdns_service = MdnsService::mdns_init().unwrap();
+    mdns_service.mdns_hostname_set(&node_id);
+    mdns_service.mdns_service_add(
+            &node_id, 
+            "esp_local_ctrl", 
+            "tcp", 
+            &[
+                ("node_id", &node_id), 
+                ("version_endpoint", "/esp_local_ctrl/version"), 
+                ("session_endpoint", "/esp_local_ctrl/session"), 
+                ("control_endpoint", "/esp_local_ctrl/control"),
+            ]);  
+
+    log::info!("node id: {}", node_id);
+
+    rmaker.local_ctrl_init(ProtocommSecurity::default())?;
     rmaker.start()?;
-
-    // let node_id = "hMKvVdMC8eKt6UzoNHTVvj";
-    // let mut mdns_service = esp_idf_svc::mdns::EspMdns::take().unwrap();
-    // mdns_service
-    //     .set_hostname(node_id)
-    //     .unwrap();
-    // mdns_service
-    //     .add_service(
-    //         Some(node_id), 
-    //         "_esp_local_ctrl", 
-    //         "_tcp", 
-    //         8080,
-    //         &[
-    //             ("node_id", "hMKvVdMC8eKt6UzoNHTVvj"), 
-    //             ("version_endpoint", "/esp_local_ctrl/version"), 
-    //             ("session_endpoint", "/esp_local_ctrl/session"), 
-    //             ("control_endpoint", "/esp_local_ctrl/control"),
-    //         ])
-    //     .unwrap();
-
-    // log::info!("node id: {}", node_id);
-
-    let _ = rmaker.local_ctrl_init();
     println!("rmaker done");
     drop(rmaker); // drop the lock so that callbacks can use it
     rainmaker::prevent_drop();
