@@ -2,6 +2,7 @@ include!(concat!(env!("OUT_DIR"), "/rainmaker.rs"));
 
 pub mod error;
 pub mod node;
+pub(crate) mod utils;
 pub mod wifi_prov;
 pub mod local_ctrl;
 
@@ -12,11 +13,13 @@ use components::protocomm::*;
 use components::{
     mqtt::{self, MqttClient, MqttConfiguration, MqttEvent, TLSconfiguration},
     persistent_storage::{Nvs, NvsPartition},
+    protocomm::ProtocommSecurity,
     wifi::WifiMgr,
 };
 use local_ctrl::LocalCtrlConfig;
 use error::RMakerError;
 use node::Node;
+use prost::Message;
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
@@ -25,12 +28,10 @@ use std::{
     time::Duration,
 };
 
-use prost::Message;
-
-#[cfg(target_os = "espidf")]
+#[cfg(any(target_os = "espidf", feature = "linux_wifi"))]
 use wifi_prov::{WifiProvisioningConfig, WifiProvisioningMgr};
 
-#[cfg(target_os = "espidf")]
+#[cfg(any(target_os = "espidf", feature = "linux_wifi"))]
 use components::wifi::WifiClientConfig;
 
 #[cfg(target_os = "linux")]
@@ -173,11 +174,10 @@ where
         self.node = Some(node.into());
     }
 
-    #[cfg(target_os = "espidf")]
-    pub fn init_wifi(&mut self) -> Result<(), RMakerError> {
-        
+    #[cfg(any(target_os = "espidf", feature = "linux_wifi"))]
+    pub fn init_wifi(&mut self, sec_config: ProtocommSecurity) -> Result<(), RMakerError> {
         let provisioned_status = WifiProvisioningMgr::get_provisioned_creds();
-        
+
         match provisioned_status {
             Some((ssid, password)) => {
                 log::info!(
@@ -185,13 +185,13 @@ where
                     ssid,
                     password
                 );
-                
+
                 let wifi_client_config = WifiClientConfig {
                     ssid,
                     password,
                     ..Default::default()
                 };
-                
+
                 let mut wifi = self.wifi_driv.lock().unwrap();
                 wifi.set_client_config(wifi_client_config).unwrap();
                 wifi.start().unwrap();
@@ -200,18 +200,24 @@ where
             }
             None => {
                 self.mqtt_init()?;
-                let prov_mgr = WifiProvisioningMgr::new(None, self.wifi_driv.clone());
+                let prov_config = WifiProvisioningConfig {
+                    device_name: "ABC12".into(),
+                    scheme: wifi_prov::WifiProvScheme::SoftAP,
+                    security: sec_config,
+                };
+
+                let prov_mgr = WifiProvisioningMgr::new(self.wifi_driv.clone(), prov_config);
                 log::info!("Node not provisioned previously. Starting Wi-Fi Provisioning");
                 self.prov_mgr = Some(prov_mgr);
                 self.start_wifi_provisioning()?;
             }
         };
-        
+
         Ok(())
     }
-    
-    #[cfg(target_os = "linux")]
-    pub fn init_wifi(&mut self) -> Result<(), RMakerError> {
+
+    #[cfg(all(target_os = "linux", not(feature = "linux_wifi")))]
+    pub fn init_wifi(&mut self, _sec: ProtocommSecurity) -> Result<(), RMakerError> {
         log::info!("Running on linux.. Skipping WiFi setup");
         Ok(())
     }
@@ -267,13 +273,9 @@ where
         Ok(())
     }
 
-    #[cfg(target_os = "espidf")]
+    #[cfg(any(target_os = "espidf", feature = "linux_wifi"))]
     fn start_wifi_provisioning(&mut self) -> Result<(), RMakerError> {
         let prov_mgr = self.prov_mgr.as_mut().unwrap();
-        prov_mgr.init(WifiProvisioningConfig {
-            device_name: "ABC12".to_string(),
-            scheme: wifi_prov::WifiProvScheme::SoftAP,
-        });
 
         // while we figure out the issue about static lifetime on esp
         // #[cfg(target_os="linux")]
@@ -308,7 +310,7 @@ where
         let client_cert = rmaker_namespace.get_bytes("client_cert");
         let client_key = rmaker_namespace.get_bytes("client_key");
 
-        if node_id == None || client_cert == None || client_key == None {
+        if node_id.is_none() || client_cert.is_none() || client_key.is_none() {
             let claimdata_notfound_error = "Please set RMAKER_CLAIMDATA_LOC env variable pointing to your rainmaker claimdata folder";
 
             let claimdata_loc = env::var("RMAKER_CLAIMDATA_PATH").expect(claimdata_notfound_error);
@@ -373,10 +375,12 @@ where
             }
         };
 
-        let protocomm_new = Protocomm::new(
-            ProtocomTransport::Httpd(TransportHttpd::new_1()),
-            ProtocommSecurity::Sec0,
-        );
+        let protocomm_config = ProtocommConfig {
+            transport: ProtocomTransportConfig::Httpd(HttpConfiguration::default()),
+            security: config.security,
+        };
+
+        let protocomm_new = Protocomm::new(protocomm_config);
 
         self.local_ctrl = Some(LocalCtrlConfig {
                 protocom: protocomm_new,
@@ -389,7 +393,7 @@ where
     }
 }
 
-fn mqtt_callback<'a>(event: MqttEvent, node: Arc<Node<'a>>) {
+fn mqtt_callback(event: MqttEvent, node: Arc<Node<'_>>) {
     let print_mqtt_event = |event_name: MqttEvent| log::info!("mqtt: {event_name:?}");
 
     match event {
@@ -400,7 +404,7 @@ fn mqtt_callback<'a>(event: MqttEvent, node: Arc<Node<'a>>) {
             let devices = received_val.keys();
             for device in devices {
                 let params = received_val.get(device).unwrap().to_owned();
-                node.exeute_device_callback(&device, params);
+                node.exeute_device_callback(device, params);
             }
         }
 
@@ -410,11 +414,11 @@ fn mqtt_callback<'a>(event: MqttEvent, node: Arc<Node<'a>>) {
     }
 }
 
-pub fn cloud_user_assoc_callback<'a>(
+pub fn cloud_user_assoc_callback(
     _ep: String,
     data: Vec<u8>,
     node_id: String,
-    mqtt_client: Option<WrappedInArcMutex<MqttClient<'a>>>,
+    mqtt_client: Option<WrappedInArcMutex<MqttClient<'_>>>,
 ) -> Vec<u8> {
     let req_proto = RMakerConfigPayload::decode(&*data).unwrap();
     let req_payload = req_proto.payload.unwrap();
@@ -426,38 +430,35 @@ pub fn cloud_user_assoc_callback<'a>(
 
     log::info!("received user_id={}, secret_key={}", user_id, secret_key);
 
-    match mqtt_client {
-        Some(mqtt) => {
-            let mut mqtt_client = mqtt.lock().unwrap();
+    if let Some(mqtt) = mqtt_client {
+        let mut mqtt_client = mqtt.lock().unwrap();
 
-            let user_mapping_json = json!({
-                "node_id": node_id,
-                "user_id": user_id,
-                "secret_key": secret_key,
-                "reset": true
-            });
+        let user_mapping_json = json!({
+            "node_id": node_id,
+            "user_id": user_id,
+            "secret_key": secret_key,
+            "reset": true
+        });
 
-            let user_mapping_topic = format!("node/{}/user/mapping", node_id);
-            mqtt_client.publish(
-                user_mapping_topic.as_str(),
-                &mqtt::QoSLevel::AtLeastOnce,
-                user_mapping_json.to_string().as_bytes().to_vec(),
-            );
-        }
-        None => {}
+        let user_mapping_topic = format!("node/{}/user/mapping", node_id);
+        mqtt_client.publish(
+            user_mapping_topic.as_str(),
+            &mqtt::QoSLevel::AtLeastOnce,
+            user_mapping_json.to_string().as_bytes().to_vec(),
+        );
     }
 
-    let mut res_proto = RMakerConfigPayload::default();
-    res_proto.msg = RMakerConfigMsgType::TypeRespSetUserMapping.into();
-    res_proto.payload = Some(r_maker_config_payload::Payload::RespSetUserMapping(
-        RespSetUserMapping {
-            status: RMakerConfigStatus::Success.into(),
-            node_id,
-        },
-    ));
+    let res_proto = RMakerConfigPayload {
+        msg: RMakerConfigMsgType::TypeRespSetUserMapping.into(),
+        payload: Some(r_maker_config_payload::Payload::RespSetUserMapping(
+            RespSetUserMapping {
+                status: RMakerConfigStatus::Success.into(),
+                node_id,
+            },
+        )),
+    };
 
-    let res = res_proto.encode_to_vec();
-    res
+    res_proto.encode_to_vec()
 }
 
 pub fn prevent_drop() {

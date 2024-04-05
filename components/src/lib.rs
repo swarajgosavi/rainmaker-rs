@@ -9,6 +9,8 @@ pub mod protocomm;
 pub mod wifi;
 pub mod local_ctrl;
 
+pub(crate) mod utils;
+
 fn hello(name: &str) {
     log::info!("hello from {}", name);
 }
