@@ -3,12 +3,10 @@
 mod device_led;
 mod device_light;
 
-#[cfg(target_os = "espidf")]
-use components::{protocomm::ProtocommSecurity, wifi::WifiMgr};
+// #[cfg(target_os = "espidf")]
+use components::protocomm::ProtocommSecurity;
 use device_led::*;
 use device_light::*;
-
-use ::mdns::mdns::*;
 
 #[cfg(target_os = "espidf")]
 use esp_idf_svc::hal::{
@@ -99,19 +97,6 @@ fn main() -> Result<(), RMakerError> {
     initialize_light_led_drivers(peripherals);
 
     #[cfg(target_os = "espidf")]
-
-    {
-        let led_driver_local = LedcDriver::new(
-            peripherals.ledc.channel0,
-            LedcTimerDriver::new(
-                peripherals.ledc.timer0,
-                &ledc::config::TimerConfig::default(),
-            )
-            .unwrap(),
-            peripherals.pins.gpio4,
-        )
-        .unwrap();
-
     let wifi_arc_mutex = Arc::new(Mutex::new(WifiMgr::new()?));
 
 
@@ -157,27 +142,7 @@ fn main() -> Result<(), RMakerError> {
     node.add_device(light_device);
     node.add_device(led_device);
     rmaker.register_node(node);
-
-    rmaker.init_wifi(ProtocommSecurity::new_sec1(Some("abcd1234".to_string())))?; // hardcoded
-
-    let node_id = rmaker.get_node_id();
-    let mut mdns_service = MdnsService::mdns_init().unwrap();
-    mdns_service.mdns_hostname_set(&node_id);
-    mdns_service.mdns_service_add(
-            &node_id, 
-            "esp_local_ctrl", 
-            "tcp", 
-            &[
-                ("node_id", &node_id), 
-                ("version_endpoint", "/esp_local_ctrl/version"), 
-                ("session_endpoint", "/esp_local_ctrl/session"), 
-                ("control_endpoint", "/esp_local_ctrl/control"),
-            ]);  
-
-    log::info!("node id: {}", node_id);
-
     rmaker.local_ctrl_init(ProtocommSecurity::default())?;
-
     rmaker.start()?;
     println!("rmaker done");
     drop(rmaker); // drop the lock so that callbacks can use it

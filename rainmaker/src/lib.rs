@@ -9,13 +9,13 @@ pub(crate) mod utils;
 pub mod wifi_prov;
 pub mod local_ctrl;
 
-// use ::mdns::mdns::*;
+use ::mdns::mdns::*;
 
 mod rmaker_mqtt;
 
 use components::{
     mqtt::ReceivedMessage,
-    persistent_storage::{Nvs, NvsPartition},
+    persistent_storage::{Nvs, NvsPartition}, protocomm::ProtocommSecurity,
 };
 use local_ctrl::LocalCtrlConfig;
 use error::RMakerError;
@@ -172,29 +172,29 @@ where
 
     pub fn local_ctrl_init(&mut self, sec_config: ProtocommSecurity) -> Result<(), RMakerError> {
 
-        // let node_id = self.get_node_id();
+        let node_id = self.get_node_id();
 
-        // let mut mdns = MdnsService::mdns_init().unwrap();
-        // mdns.mdns_hostname_set(&node_id);
+        let mut mdns = MdnsService::mdns_init().unwrap();
+        mdns.mdns_hostname_set(&node_id);
     
-        // mdns.mdns_service_add(
-        //     &node_id, 
-        //     "esp_local_ctrl", 
-        //     "tcp", 
-        //     &[
-        //         ("node_id", &node_id), 
-        //         ("version_endpoint", "/esp_local_ctrl/version"), 
-        //         ("session_endpoint", "/esp_local_ctrl/session"), 
-        //         ("control_endpoint", "/esp_local_ctrl/control"),
-        //     ]);    
+        mdns.mdns_service_add(
+            &node_id, 
+            "esp_local_ctrl", 
+            "tcp", 
+            &[
+                ("node_id", &node_id), 
+                ("version_endpoint", "/esp_local_ctrl/version"), 
+                ("session_endpoint", "/esp_local_ctrl/session"), 
+                ("control_endpoint", "/esp_local_ctrl/control"),
+            ]);    
 
-        // log::info!("node id: {}", &node_id);
+        log::info!("node id: {}", &node_id);
 
         let node = match &self.node {
             Some(node) => node.clone(),
             None => {
                 return Err(RMakerError(
-                    "Unable to intialize MQTT Client: Node not Registered".to_string(),
+                    "Unable to intialize Local Control".to_string(),
                 ))
             }
         };

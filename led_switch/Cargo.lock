@@ -1324,9 +1324,9 @@ dependencies = [
  "embuild",
  "esp-idf-svc",
  "log",
- "mdns",
  "rainmaker",
  "serde_json",
+ "simple_logger",
  "smart-leds",
  "smart-leds-trait 0.2.1",
  "ws2812-esp32-rmt-driver",
@@ -1373,6 +1373,7 @@ checksum = "90ed8c1e510134f979dbc4f070f87d4313098b704861a105fe34231c70a3901c"
 [[package]]
 name = "mdns"
 version = "0.1.0"
+source = "git+https://github.com/swarajgosavi/rainmaker-rs.git?branch=mdns#f8a9d46d0c74a053ebf30e3d21db000d2e96978b"
 dependencies = [
  "anyhow",
  "embedded-svc 0.27.1",

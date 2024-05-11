@@ -188,7 +188,7 @@ fn handle_cmd_set_property_values(req_payload: local_ctrl_message::Payload, node
         local_ctrl_message::Payload::CmdSetPropVals(values) => {
             resp_payload.status = Status::Success.into();
 
-            // log::info!("{:?}", values);
+            log::info!("{:?}", values);
             log::info!("{:?}", std::str::from_utf8(&values.props[0].value).unwrap());
 
             let msg = values.props[0].value.clone();
